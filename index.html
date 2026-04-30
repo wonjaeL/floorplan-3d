@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>복층 원룸 3D 뷰어</title>
+<title>복층 원룸 3D 뷰어 v3</title>
 <style>
   body { margin: 0; overflow: hidden; font-family: -apple-system, sans-serif; background: #b0d0e8; }
   #info {
@@ -28,17 +28,16 @@
 </head>
 <body>
 <div id="info">
-  <strong>복층 원룸 3D</strong> (빈집)<br>
-  <small>2.4 × 4.1 m · 1F 3.0m + Loft 0.9m</small><br>
-  좌클릭 + 드래그 : 회전<br>
-  마우스 휠 : 확대/축소<br>
-  우클릭 + 드래그 : 이동<br>
-  <small>※ 시야 쪽 외벽/천장은 자동으로 숨겨집니다</small>
+  <strong>복층 원룸 3D v3</strong><br>
+  <small>3.30 × 5.62 m · 1F 2.0m + Loft 0.9m</small><br>
+  좌클릭+드래그: 회전 / 휠: 확대 / 우클릭+드래그: 이동<br>
+  <small>※ 시야 쪽 외벽/천장은 자동 숨김</small>
 </div>
 <div id="controls">
   <button onclick="setView('iso')">아이소</button>
   <button onclick="setView('top')">위에서</button>
-  <button onclick="setView('side')">측면</button>
+  <button onclick="setView('front')">정면(창)</button>
+  <button onclick="setView('back')">뒤(현관)</button>
   <button onclick="setView('inside')">실내</button>
   <button id="btnAutoHide" class="active" onclick="toggleAutoHide()">벽 자동숨김 ON</button>
   <button id="btnLoft" class="active" onclick="toggleLoft()">복층 ON</button>
@@ -58,41 +57,54 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 // ====== Dimensions (m) ======
-const W = 2.4;
-const L = 4.1;
-const H1 = 3.0;
-const SLAB = 0.1;
-const H_LOFT = 0.9;
-const TH = H1 + SLAB + H_LOFT;
-const WALL_THK = 0.1;
-const BATH_H = 2.0;
-const STAIR_W = 0.4;
+const W = 3.30;
+const L = 5.62;
+const H1 = 2.00;
+const SLAB = 0.10;
+const H_LOFT = 0.90;
+const TH = H1 + SLAB + H_LOFT; // 3.00
+const WALL_THK = 0.10;
+const BATH_H = 2.00;
 
 // ====== Layout ======
-// X axis = 폭(좁은쪽), Z axis = 길이(긴쪽). Z=0 = 현관쪽 외벽, Z=L = 창문쪽
-// Bathroom: 한쪽 코너 (X=0~1.4, Z=0~2.2)
-const BX1=0.0, BX2=1.4, BZ1=0.0, BZ2=2.2;
-// Entrance shoe area 1×1m (욕실 옆 코너)
-const EX1=BX2, EX2=W,  EZ1=0.0, EZ2=1.0;
-// Hall (현관 안쪽, 욕실 옆 통로)
-const HX1=BX2, HX2=W,  HZ1=EZ2, HZ2=BZ2;
-// Kitchen + Wardrobe column on X=0 (부엌+옷장 = 한쪽 긴 벽 따라 일자)
-const K_X = 0.6;          // 부엌/옷장 깊이
-const KZ1=BZ2, KZ2=BZ2 + 1.4;          // 부엌 1.4m
-const WDZ1=KZ2, WDZ2=L;                // 옷장은 부엌 끝~창쪽 끝
-// Stairs (부엌 끝쯤에서 시작 → 부엌 위 복층으로)
-// 진행 방향 = X (현관쪽에서 부엌쪽으로), 폭 = Z 방향 0.4m
-const STAIR_Z1 = HZ2 + 0.0;            // 욕실/통로 끝에서 시작 (Z=2.2)
-const STAIR_Z2 = STAIR_Z1 + STAIR_W;   // Z=2.6
-const STAIR_X_FROM = W;                // X=W쪽에서 시작
-const STAIR_X_TO = K_X;                // 부엌 끝까지
-const STAIR_LEN_X = STAIR_X_FROM - STAIR_X_TO;
-// Loft (부엌+욕실 위)
-const LOFT_X1 = 0;
-const LOFT_X2 = K_X + 0.4;             // 부엌 폭 + 약간
-const LOFT_Z2 = STAIR_Z2;              // 계단 끝까지
+// 현관 도어 (북측 외벽 z=0)
+const ED_X1 = 0.60, ED_X2 = 1.77;
+// 욕실 (back-right, 1.35w × 1.06d)
+const BX1 = 1.95, BX2 = 3.30;
+const BZ1 = 0.00, BZ2 = 1.06;
+const BD_Z1 = 0.25, BD_Z2 = 1.00;          // 욕실 도어 (서측면, 폭 0.75)
+// 작은 수납 X (욕실 SE 옆, 0.85×0.47) — 욕실 외부, 짧은 벽으로 분리
+const XCL_X1 = BX2 - 0.85, XCL_X2 = BX2;
+const XCL_Z1 = BZ2,        XCL_Z2 = BZ2 + 0.47;
 
-// ====== Scene ======
+// 계단 (10단, 좌→우 ascending, 욕실 남측 벽 따라)
+const N_STEPS = 10;
+const STAIR_W = 0.50;                       // z 방향 폭
+const STAIR_X1 = 0.00, STAIR_X2 = W;
+const STAIR_Z1 = BZ2;                       // 1.06 (욕실 벽에 붙음)
+const STAIR_Z2 = STAIR_Z1 + STAIR_W;        // 1.56
+const stepRun  = (STAIR_X2 - STAIR_X1) / N_STEPS;  // 0.33
+const stepRise = H1 / N_STEPS;              // 0.20
+
+// 복층 (z=0 ~ 4.15)
+const LOFT_Z2 = 4.15;
+const LOFT_Y = H1 + SLAB;                   // 2.10
+
+// 부엌 (좌측 긴벽 니치, 뒷벽쪽)
+const KITCHEN_DEPTH = 0.55;
+const KX1 = 0.00, KX2 = KITCHEN_DEPTH;      // 0~0.55
+const KZ1 = 0.04, KZ2 = KZ1 + 1.17;         // 0.04~1.21
+
+// 좌측 옷장 (부엌 남쪽, 풀하이트)
+const WDL_X1 = 0.00, WDL_X2 = WD_DEPTH_LEFT();
+function WD_DEPTH_LEFT(){ return 0.55; }
+const WDL_Z1 = KZ2,  WDL_Z2 = LOFT_Z2;      // 1.21~4.15
+
+// 창 (앞벽 z=L)
+const WIN_X1 = 0.60, WIN_X2 = 2.70;
+const WIN_Y1 = 0.90, WIN_Y2 = 2.00;
+
+// ====== Scene / Camera / Renderer ======
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xc8dcee);
 scene.fog = new THREE.Fog(0xc8dcee, 30, 80);
@@ -112,56 +124,64 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 0.3;
 controls.maxDistance = 30;
-controls.target.set(W/2, 1.2, L/2);
+controls.target.set(W/2, 1.0, L/2);
 
 // ====== Lights ======
 scene.add(new THREE.AmbientLight(0xffffff, 0.55));
 const sun = new THREE.DirectionalLight(0xfff2dc, 1.4);
-sun.position.set(-12, 16, 8);
+sun.position.set(-12, 16, 14);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -15;
-sun.shadow.camera.right = 15;
-sun.shadow.camera.top = 15;
-sun.shadow.camera.bottom = -15;
+sun.shadow.camera.left = -15; sun.shadow.camera.right = 15;
+sun.shadow.camera.top = 15;   sun.shadow.camera.bottom = -15;
 sun.shadow.bias = -0.0005;
 scene.add(sun);
 
-const indoor = new THREE.PointLight(0xfff0d8, 0.8, 7);
-indoor.position.set(W/2, H1 - 0.15, 3.0);
-scene.add(indoor);
-const indoorBath = new THREE.PointLight(0xfff0d8, 0.3, 3);
-indoorBath.position.set(BX2/2, BATH_H - 0.1, BZ2/2);
-scene.add(indoorBath);
+const ledA = new THREE.PointLight(0xfff5e0, 0.55, 5);
+ledA.position.set(W/2, H1 - 0.12, 2.7);
+scene.add(ledA);
+const ledB = new THREE.PointLight(0xfff5e0, 0.55, 5);
+ledB.position.set(W/2 - 0.3, H1 - 0.12, 4.5);
+scene.add(ledB);
+const bathL = new THREE.PointLight(0xfff0d8, 0.4, 2.5);
+bathL.position.set((BX1+BX2)/2, BATH_H - 0.1, (BZ1+BZ2)/2);
+scene.add(bathL);
 
 // ====== Materials ======
-const wallMat       = new THREE.MeshStandardMaterial({ color: 0xf6f3ec, roughness: 0.95, side: THREE.DoubleSide });
-const wallExtMat    = new THREE.MeshStandardMaterial({ color: 0xe5e0d4, roughness: 0.95, side: THREE.DoubleSide });
-const ceilingMat    = new THREE.MeshStandardMaterial({ color: 0xeae6dc, roughness: 0.95 });
-const floorMat      = new THREE.MeshStandardMaterial({ color: 0xd9c39a, roughness: 0.55 });
-const floorBathMat  = new THREE.MeshStandardMaterial({ color: 0x4a3a32, roughness: 0.5 });
-const floorEntryMat = new THREE.MeshStandardMaterial({ color: 0x6d6155, roughness: 0.7 });
-const cabinetMat    = new THREE.MeshStandardMaterial({ color: 0xf2eddf, roughness: 0.4 });
-const cabinetGlossMat = new THREE.MeshStandardMaterial({ color: 0xfaf6ea, roughness: 0.2, metalness: 0.05 });
-const counterMat    = new THREE.MeshStandardMaterial({ color: 0xf5f4ee, roughness: 0.3 });
-const woodStepMat   = new THREE.MeshStandardMaterial({ color: 0xa4753f, roughness: 0.6 });
-const railMat       = new THREE.MeshStandardMaterial({ color: 0xfafaf6, roughness: 0.5 });
-const metalMat      = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, roughness: 0.35, metalness: 0.6 });
-const blackMat      = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
-const doorMat       = new THREE.MeshStandardMaterial({ color: 0xd5cab2, roughness: 0.55 });
-const doorBathMat   = new THREE.MeshStandardMaterial({ color: 0xeeeae0, roughness: 0.5 });
-const acMat         = new THREE.MeshStandardMaterial({ color: 0xeeece5, roughness: 0.55 });
-const wallpadMat    = new THREE.MeshStandardMaterial({ color: 0x222, roughness: 0.4 });
-const glassMat      = new THREE.MeshPhysicalMaterial({
+const wallMat        = new THREE.MeshStandardMaterial({ color: 0xf6f3ec, roughness: 0.95, side: THREE.DoubleSide });
+const wallExtMat     = new THREE.MeshStandardMaterial({ color: 0xe5e0d4, roughness: 0.95, side: THREE.DoubleSide });
+const ceilingMat     = new THREE.MeshStandardMaterial({ color: 0xeae6dc, roughness: 0.95 });
+const floorMat       = new THREE.MeshStandardMaterial({ color: 0xe8d4ae, roughness: 0.55 });
+const floorBathMat   = new THREE.MeshStandardMaterial({ color: 0x8a6f5a, roughness: 0.5 });
+const accentTileMat  = new THREE.MeshStandardMaterial({ color: 0x5a4a3c, roughness: 0.45 });
+const cabinetGlossMat= new THREE.MeshStandardMaterial({ color: 0xfaf6ea, roughness: 0.18, metalness: 0.05 });
+const counterMat     = new THREE.MeshStandardMaterial({ color: 0xf2efe5, roughness: 0.3 });
+const woodStepMat    = new THREE.MeshStandardMaterial({ color: 0xb88858, roughness: 0.55 });
+const woodFrameMat   = new THREE.MeshStandardMaterial({ color: 0xc8a070, roughness: 0.55 });
+const railMat        = new THREE.MeshStandardMaterial({ color: 0xfafaf6, roughness: 0.5 });
+const stairSideMat   = new THREE.MeshStandardMaterial({ color: 0xfafaf6, roughness: 0.5, side: THREE.DoubleSide });
+const metalMat       = new THREE.MeshStandardMaterial({ color: 0xb8b8b8, roughness: 0.35, metalness: 0.6 });
+const blackMat       = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4 });
+const doorMat        = new THREE.MeshStandardMaterial({ color: 0xd5cab2, roughness: 0.55 });
+const doorBathMat    = new THREE.MeshStandardMaterial({ color: 0xeae0c8, roughness: 0.5 });
+const acMat          = new THREE.MeshStandardMaterial({ color: 0xfafaf2, roughness: 0.55 });
+const wallpadMat     = new THREE.MeshStandardMaterial({ color: 0x222, roughness: 0.4 });
+const ledPanelMat    = new THREE.MeshStandardMaterial({ color: 0xfffaee, roughness: 0.3, emissive: 0xfff5e0, emissiveIntensity: 0.5 });
+const seamMat        = new THREE.MeshStandardMaterial({ color: 0xc8c0aa, roughness: 0.6 });
+const mullMat        = new THREE.MeshStandardMaterial({ color: 0xe0dccf, roughness: 0.5 });
+const glassMat       = new THREE.MeshPhysicalMaterial({
   color: 0xb8d2e6, transmission: 0.85, opacity: 0.35, transparent: true,
   roughness: 0.05, thickness: 0.05, side: THREE.DoubleSide
+});
+const showerGlassMat = new THREE.MeshPhysicalMaterial({
+  color: 0xeef4f8, transmission: 0.92, opacity: 0.22, transparent: true,
+  roughness: 0.02, thickness: 0.04, side: THREE.DoubleSide
 });
 
 function box(w, h, d, mat, x, y, z, parent=scene) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   m.position.set(x, y, z);
-  m.castShadow = true;
-  m.receiveShadow = true;
+  m.castShadow = true; m.receiveShadow = true;
   parent.add(m);
   return m;
 }
@@ -176,23 +196,19 @@ ground.position.y = -0.06;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// ====== Building root ======
+// ====== Building ======
 const building = new THREE.Group();
 scene.add(building);
 
-// 1F floor — 신발존 영역 빼고 두 조각
-// 1) X=0~EX1, Z=0~L (욕실/부엌/옷장 라인 아래 floor)
-box(EX1, 0.04, L, floorMat, EX1/2, 0.02, L/2, building);
-// 2) X=EX1~W, Z=EZ2~L (현관 신발존 위쪽)
-box(W - EX1, 0.04, L - EZ2, floorMat, (EX1+W)/2, 0.02, (EZ2+L)/2, building);
-// 신발존 (낮은 floor)
-box(EX2 - EX1, 0.04, EZ2 - EZ1, floorEntryMat,
-    (EX1+EX2)/2, -0.02, (EZ1+EZ2)/2, building);
-// 현관 턱
-box(EX2 - EX1, 0.025, 0.04, woodStepMat,
-    (EX1+EX2)/2, 0.0125, EZ2 - 0.02, building);
+// 1F floor (욕실 영역 빼고)
+// (1) 메인 (z>BZ2 전체 + z<BZ2 좌측 = x<BX1)
+box(W, 0.04, L - BZ2, floorMat, W/2, 0.02, (BZ2 + L)/2, building);
+box(BX1, 0.04, BZ2, floorMat, BX1/2, 0.02, BZ2/2, building);
+// 욕실 바닥 (브라운 타일)
+box(BX2 - BX1, 0.02, BZ2 - BZ1, floorBathMat,
+    (BX1+BX2)/2, 0.02, (BZ1+BZ2)/2, building);
 
-// ====== External walls (4 sides), grouped ======
+// ====== External walls ======
 const ext = {
   west:  new THREE.Group(),
   east:  new THREE.Group(),
@@ -201,233 +217,256 @@ const ext = {
 };
 for (const g of Object.values(ext)) building.add(g);
 
-// West (X=0): solid (kitchen/wardrobe 뒷벽)
 box(WALL_THK, TH, L + 2*WALL_THK, wallExtMat, -WALL_THK/2, TH/2, L/2, ext.west);
-// East (X=W): solid (빈벽 / 에어컨)
 box(WALL_THK, TH, L + 2*WALL_THK, wallExtMat, W + WALL_THK/2, TH/2, L/2, ext.east);
 
-// South (Z=0): 현관문 cutout (X=EX1~EX2, height 0~2.0)
-// 좌측 (욕실 외벽쪽)
-box(EX1 + WALL_THK, TH, WALL_THK, wallExtMat,
-    (EX1 - WALL_THK)/2, TH/2, -WALL_THK/2, ext.south);
-// 우측
-box(W - EX2 + WALL_THK, TH, WALL_THK, wallExtMat,
-    (EX2 + W + WALL_THK)/2, TH/2, -WALL_THK/2, ext.south);
-// header
-box(EX2 - EX1, TH - 2.0, WALL_THK, wallExtMat,
-    (EX1+EX2)/2, (2.0 + TH)/2, -WALL_THK/2, ext.south);
-// 현관문
-box(EX2 - EX1 - 0.05, 1.95, 0.04, doorMat,
-    (EX1+EX2)/2, 0.975, -WALL_THK/2 - 0.025, ext.south);
-// 도어록
-{
-  const lock = box(0.07, 0.18, 0.025, blackMat,
-                   EX1 + 0.18, 1.1, -WALL_THK/2 - 0.05, ext.south);
-}
+// 북측 외벽 (z=0): 현관 cutout
+box(ED_X1 + WALL_THK, TH, WALL_THK, wallExtMat,
+    (ED_X1 - WALL_THK)/2, TH/2, -WALL_THK/2, ext.north);
+box(W - ED_X2 + WALL_THK, TH, WALL_THK, wallExtMat,
+    (ED_X2 + W + WALL_THK)/2, TH/2, -WALL_THK/2, ext.north);
+box(ED_X2 - ED_X1, TH - 2.0, WALL_THK, wallExtMat,
+    (ED_X1+ED_X2)/2, (2.0 + TH)/2, -WALL_THK/2, ext.north);
+// 현관 도어
+box(ED_X2 - ED_X1 - 0.05, 1.95, 0.04, doorMat,
+    (ED_X1+ED_X2)/2, 0.975, -WALL_THK/2 - 0.025, ext.north);
+box(0.07, 0.18, 0.025, blackMat,
+    ED_X1 + 0.18, 1.10, -WALL_THK/2 - 0.05, ext.north);
 
-// North (Z=L): 창문 (X=0.4~2.0, height 0.9~2.6)
-box(W + 2*WALL_THK, TH - 2.6, WALL_THK, wallExtMat,
-    W/2, (2.6 + TH)/2, L + WALL_THK/2, ext.north);
-box(W + 2*WALL_THK, 0.9, WALL_THK, wallExtMat,
-    W/2, 0.45, L + WALL_THK/2, ext.north);
-box(0.4 + WALL_THK, 1.7, WALL_THK, wallExtMat,
-    (0.4 - WALL_THK)/2, 1.75, L + WALL_THK/2, ext.north);
-box(W + WALL_THK - 2.0, 1.7, WALL_THK, wallExtMat,
-    (2.0 + W + WALL_THK)/2, 1.75, L + WALL_THK/2, ext.north);
-box(1.6, 1.7, 0.04, glassMat, 1.2, 1.75, L + WALL_THK/2, ext.north);
-const mull = new THREE.MeshStandardMaterial({ color: 0xe0dccf, roughness: 0.5 });
-box(0.04, 1.72, 0.02, mull, 1.2, 1.75, L + WALL_THK/2, ext.north);
-box(1.62, 0.04, 0.02, mull, 1.2, 1.75, L + WALL_THK/2, ext.north);
+// 남측 외벽 (z=L): 창 cutout
+box(W + 2*WALL_THK, WIN_Y1, WALL_THK, wallExtMat,
+    W/2, WIN_Y1/2, L + WALL_THK/2, ext.south);
+box(W + 2*WALL_THK, TH - WIN_Y2, WALL_THK, wallExtMat,
+    W/2, (WIN_Y2 + TH)/2, L + WALL_THK/2, ext.south);
+box(WIN_X1 + WALL_THK, WIN_Y2 - WIN_Y1, WALL_THK, wallExtMat,
+    (WIN_X1 - WALL_THK)/2, (WIN_Y1+WIN_Y2)/2, L + WALL_THK/2, ext.south);
+box(W - WIN_X2 + WALL_THK, WIN_Y2 - WIN_Y1, WALL_THK, wallExtMat,
+    (WIN_X2 + W + WALL_THK)/2, (WIN_Y1+WIN_Y2)/2, L + WALL_THK/2, ext.south);
+box(WIN_X2 - WIN_X1, WIN_Y2 - WIN_Y1, 0.04, glassMat,
+    (WIN_X1+WIN_X2)/2, (WIN_Y1+WIN_Y2)/2, L + WALL_THK/2, ext.south);
+box(WIN_X2 - WIN_X1, 0.04, 0.05, mullMat,
+    (WIN_X1+WIN_X2)/2, (WIN_Y1+WIN_Y2)/2, L + WALL_THK/2, ext.south);
+for (let i = 1; i < 3; i++) {
+  const x = WIN_X1 + (WIN_X2 - WIN_X1) * i / 3;
+  box(0.04, WIN_Y2 - WIN_Y1, 0.05, mullMat,
+      x, (WIN_Y1+WIN_Y2)/2, L + WALL_THK/2, ext.south);
+}
 
 // 천장
 const ceilingGroup = new THREE.Group();
 building.add(ceilingGroup);
 box(W, 0.05, L, ceilingMat, W/2, TH - 0.025, L/2, ceilingGroup);
+box(0.55, 0.025, 0.55, ledPanelMat, W/2,        H1 - 0.06, 2.7, ceilingGroup);
+box(0.55, 0.025, 0.55, ledPanelMat, W/2 - 0.30, H1 - 0.06, 4.5, ceilingGroup);
 
 // ====== 욕실 내부 ======
-// East wall (X=BX2): 도어 cutout (Z=BZ2-0.85 ~ BZ2-0.05)
-const BD_Z1 = BZ2 - 0.85;
-const BD_Z2 = BZ2 - 0.05;
-// East wall: 두 조각 (도어 위/아래는 도어 자체로)
-// 도어 좌측 (Z=0~BD_Z1)
-box(WALL_THK, BATH_H, BD_Z1, wallMat, BX2, BATH_H/2, BD_Z1/2, building);
-// 도어 우측 (Z=BD_Z2~BZ2)
-box(WALL_THK, BATH_H, BZ2 - BD_Z2, wallMat, BX2, BATH_H/2, (BD_Z2 + BZ2)/2, building);
-// 도어 위 header (Z=BD_Z1~BD_Z2, y=2.0~BATH_H)
-// (BATH_H = 2.0이면 header 두께 0이라 생략)
-// 욕실 도어 (반투명/흰)
-box(0.04, 1.95, BD_Z2 - BD_Z1 - 0.05, doorBathMat,
-    BX2 + 0.025, 0.975, (BD_Z1 + BD_Z2)/2, building);
-
-// 욕실 north wall (Z=BZ2)
-box(BX2, BATH_H, WALL_THK, wallMat, BX2/2, BATH_H/2, BZ2, building);
-// 욕실 floor (다크 타일)
-box(BX2, 0.02, BZ2, floorBathMat, BX2/2, 0.05, BZ2/2, building);
+// 서측 (도어 cut) — 도어 아래 좌측 + 우측
+box(WALL_THK, BATH_H, BD_Z1, wallMat, BX1, BATH_H/2, BD_Z1/2, building);
+box(WALL_THK, BATH_H, BZ2 - BD_Z2, wallMat, BX1, BATH_H/2, (BD_Z2+BZ2)/2, building);
+// 남측
+box(BX2 - BX1, BATH_H, WALL_THK, wallMat, (BX1+BX2)/2, BATH_H/2, BZ2, building);
 // 욕실 천장
-box(BX2, 0.05, BZ2, ceilingMat, BX2/2, BATH_H, BZ2/2, building);
+box(BX2 - BX1, 0.05, BZ2 - BZ1, ceilingMat,
+    (BX1+BX2)/2, BATH_H, (BZ1+BZ2)/2, building);
+// 욕실 도어 (아이보리)
+box(0.04, 1.95, BD_Z2 - BD_Z1 - 0.05, doorBathMat,
+    BX1 + 0.025, 0.975, (BD_Z1+BD_Z2)/2, building);
 
-// 욕실 비품 (빌트인만)
-// 변기 (안쪽 코너 — 도어 우측쪽)
-box(0.36, 0.4, 0.55, counterMat, BX2 - 0.25, 0.25, BZ2 - 0.4, building);
-box(0.4, 0.6, 0.18, counterMat, BX2 - 0.25, 0.5, BZ2 - 0.18, building);
-// 세면대 (현관쪽 벽)
-box(0.5, 0.06, 0.4, counterMat, BX2 - 0.3, 0.85, 0.4, building);
-box(0.5, 0.85, 0.4, cabinetMat, BX2 - 0.3, 0.42, 0.4, building);
-// 거울 캐비닛
-box(0.5, 0.6, 0.05, glassMat, BX2 - 0.3, 1.55, 0.05, building);
-box(0.55, 0.65, 0.06, cabinetMat, BX2 - 0.3, 1.55, 0.04, building);
-// 샤워 (안쪽 좌측 코너)
-box(0.7, BATH_H, 0.04, glassMat, 0.35, BATH_H/2, BZ2 - 0.7, building);
-box(0.04, BATH_H, 0.7, glassMat, 0.7, BATH_H/2, BZ2 - 0.35, building);
+// 액센트 타일 띠 (북벽)
+box(BX2 - BX1 - 0.02, 0.55, 0.02, accentTileMat,
+    (BX1+BX2)/2, 1.55, BZ1 + 0.04, building);
 
-// ====== 부엌 (X=0~K_X, Z=KZ1~KZ2) ======
-// 하부장
-box(K_X, 0.85, KZ2 - KZ1, cabinetGlossMat,
-    K_X/2, 0.45, (KZ1+KZ2)/2, building);
-// 카운터
-box(K_X + 0.04, 0.04, KZ2 - KZ1 + 0.02, counterMat,
-    K_X/2 + 0.02, 0.91, (KZ1+KZ2)/2, building);
-// 인덕션
-box(0.4, 0.025, 0.5, blackMat, K_X/2, 0.94, KZ1 + 0.3, building);
-for (let i = 0; i < 2; i++) {
-  const cm = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.08, 0.005, 24),
-    new THREE.MeshStandardMaterial({color:0x333, roughness:0.6})
-  );
-  cm.position.set(K_X/2, 0.945, KZ1 + 0.18 + i*0.24);
-  building.add(cm);
-}
-// 싱크
-box(0.5, 0.1, 0.35, blackMat, K_X/2, 0.86, KZ1 + 0.85, building);
-// 수전
+// 거울 + 우드프레임 (북벽, 세면대 위)
+box(0.55, 0.50, 0.04, glassMat,
+    BX1 + 0.95, 1.45, BZ1 + 0.04, building);
+box(0.62, 0.58, 0.05, woodFrameMat,
+    BX1 + 0.95, 1.45, BZ1 + 0.020, building);
+
+// 세면대 (북벽, 벽걸이)
+box(0.50, 0.06, 0.40, counterMat, BX1 + 0.95, 0.85, BZ1 + 0.20, building);
+box(0.36, 0.18, 0.34, counterMat, BX1 + 0.95, 0.72, BZ1 + 0.18, building);
 {
-  const f = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.025, 0.25, 12), metalMat);
-  f.position.set(K_X/2 + 0.1, 1.04, KZ1 + 0.85);
+  const f = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.020, 0.18, 12), metalMat);
+  f.position.set(BX1 + 0.95, 0.97, BZ1 + 0.10);
   building.add(f);
 }
-// 세탁기 (인덕션 아래쪽 빌트인 — 인덕션쪽 끝)
-box(0.55, 0.83, 0.55, cabinetMat, K_X/2, 0.42, KZ1 + 0.3, building);
+
+// 변기 (남동 코너)
+box(0.36, 0.40, 0.55, counterMat, BX2 - 0.22, 0.20, BZ2 - 0.30, building);
+box(0.40, 0.45, 0.18, counterMat, BX2 - 0.22, 0.62, BZ2 - 0.10, building);
+
+// 샤워 (북서 코너) — 글라스 칸막이 + 도어
+const SHOWER_W_X = 0.60;
+const SHOWER_D_Z = 0.85;
+// 동측 글라스
+box(0.04, BATH_H - 0.10, SHOWER_D_Z, showerGlassMat,
+    BX1 + SHOWER_W_X, BATH_H/2 - 0.05, BZ1 + SHOWER_D_Z/2, building);
+// 남측 글라스 도어
+box(0.45, BATH_H - 0.10, 0.04, showerGlassMat,
+    BX1 + SHOWER_W_X - 0.225, BATH_H/2 - 0.05, BZ1 + SHOWER_D_Z, building);
+// 샤워 헤드
+{
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16), metalMat);
+  head.position.set(BX1 + 0.06, 1.93, BZ1 + 0.30);
+  head.rotation.z = Math.PI/2;
+  building.add(head);
+}
+box(0.06, 0.20, 0.04, metalMat, BX1 + 0.04, 1.05, BZ1 + 0.30, building);
+box(0.20, 0.005, 0.20, blackMat, BX1 + 0.30, 0.03, BZ1 + 0.40, building);
+
+// ====== 부엌 (좌측 벽 니치, 뒷벽쪽) ======
+// 하부장
+box(KITCHEN_DEPTH, 0.85, KZ2 - KZ1, cabinetGlossMat,
+    KX1 + KITCHEN_DEPTH/2, 0.45, (KZ1+KZ2)/2, building);
+// 카운터 상판
+box(KITCHEN_DEPTH + 0.02, 0.04, KZ2 - KZ1 + 0.02, counterMat,
+    KX1 + KITCHEN_DEPTH/2 + 0.01, 0.91, (KZ1+KZ2)/2, building);
+// 인덕션 (뒷쪽 = z=KZ1쪽, 세탁기 위)
+box(0.40, 0.025, 0.34, blackMat,
+    KX1 + KITCHEN_DEPTH/2, 0.94, KZ1 + 0.20, building);
+for (let i = 0; i < 2; i++) {
+  const cm = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.075, 0.005, 24),
+    new THREE.MeshStandardMaterial({color:0x333, roughness:0.6})
+  );
+  cm.position.set(KX1 + KITCHEN_DEPTH/2, 0.945, KZ1 + 0.10 + i*0.20);
+  building.add(cm);
+}
+// 싱크 (앞쪽)
+box(0.45, 0.10, 0.34, blackMat,
+    KX1 + KITCHEN_DEPTH/2, 0.86, KZ1 + 0.85, building);
+{
+  const f = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.020, 0.22, 12), metalMat);
+  f.position.set(KX1 + KITCHEN_DEPTH - 0.10, 1.04, KZ1 + 0.85);
+  building.add(f);
+}
+// 세탁기 (인덕션 아래 빌트인)
+box(0.55, 0.83, 0.55, cabinetGlossMat,
+    KX1 + KITCHEN_DEPTH/2, 0.42, KZ1 + 0.30, building);
 {
   const drum = new THREE.Mesh(
     new THREE.CircleGeometry(0.16, 32),
     new THREE.MeshPhysicalMaterial({color:0x222, transmission:0.3, roughness:0.1, transparent:true, opacity:0.7})
   );
-  drum.position.set(K_X + 0.001, 0.42, KZ1 + 0.3);
+  drum.position.set(KX1 + KITCHEN_DEPTH + 0.001, 0.42, KZ1 + 0.30);
   drum.rotation.y = Math.PI/2;
   building.add(drum);
 }
 // 상부장
-box(K_X, 0.6, KZ2 - KZ1 - 0.2, cabinetGlossMat,
-    K_X/2, H1 - 0.85, (KZ1+KZ2)/2, building);
-
-// ====== 옷장 (빌트인, X=0~K_X, Z=KZ2~L) ======
-// 천장까지 닿는 큰 빌트인 옷장
-box(K_X, H1 - 0.04, WDZ2 - WDZ1, cabinetMat,
-    K_X/2, (H1 - 0.04)/2 + 0.04, (WDZ1+WDZ2)/2, building);
-// 도어 분할선 (얇은 홈)
-const seamMat = new THREE.MeshStandardMaterial({ color: 0xc8c0aa, roughness: 0.6 });
+box(KITCHEN_DEPTH, 0.60, KZ2 - KZ1, cabinetGlossMat,
+    KX1 + KITCHEN_DEPTH/2, H1 - 0.32, (KZ1+KZ2)/2, building);
 for (let i = 1; i < 3; i++) {
-  const z = WDZ1 + (WDZ2 - WDZ1) * i / 3;
-  box(K_X + 0.005, H1 - 0.1, 0.012, seamMat,
-      K_X/2 + 0.001, (H1 - 0.1)/2 + 0.05, z, building);
-}
-// 손잡이 (수직 슬릿)
-for (let i = 0; i < 3; i++) {
-  const z = WDZ1 + (WDZ2 - WDZ1) * (i + 0.5) / 3;
-  box(0.005, 0.4, 0.012, metalMat, K_X + 0.003, 0.9, z, building);
+  const z = KZ1 + (KZ2 - KZ1) * i / 3;
+  box(KITCHEN_DEPTH + 0.01, 0.58, 0.012, seamMat,
+      KX1 + KITCHEN_DEPTH/2 + 0.001, H1 - 0.32, z, building);
 }
 
-// ====== 현관 / 월패드 ======
-// 월패드 (현관문 안쪽 — 짧은 벽 인근에 있는 사용자 쪽 벽)
-// 평면적으로 욕실 east 외벽 = X=BX2 → 월패드는 욕실 외벽쪽 (X=BX2 약간 전)
-// 사용자 사진: 월패드는 현관문 옆 짧은 통로 끝 흰벽 (== 욕실 east 벽 위)
-box(0.16, 0.22, 0.025, wallpadMat,
-    BX2 - 0.1, 1.5, EZ2 + 0.05, building);
-// 화면
-box(0.13, 0.18, 0.005, glassMat,
-    BX2 - 0.1, 1.5, EZ2 + 0.04, building);
+// ====== 옷장 (좌측 긴벽, 부엌 남쪽) ======
+function wardrobe(x1, x2, z1, z2, h, openSide) {
+  box(x2 - x1, h, z2 - z1, cabinetGlossMat,
+      (x1+x2)/2, h/2 + 0.02, (z1+z2)/2, building);
+  const len = z2 - z1;
+  const n = Math.max(2, Math.round(len / 0.55));
+  for (let i = 1; i < n; i++) {
+    const z = z1 + len * i / n;
+    box((x2-x1) + 0.01, h - 0.06, 0.012, seamMat,
+        (x1+x2)/2 + 0.001, (h-0.06)/2 + 0.05, z, building);
+  }
+  for (let i = 0; i < n; i++) {
+    const z = z1 + len * (i + 0.5) / n;
+    if (openSide === 'east')
+      box(0.005, 0.40, 0.012, metalMat, x2 + 0.003, 0.95, z, building);
+  }
+}
+wardrobe(WDL_X1, WDL_X2, WDL_Z1, WDL_Z2, H1 - 0.04, 'east');
 
-// ====== 에어컨 (천장형, 우측 긴 벽 위쪽) ======
-box(0.85, 0.28, 0.32, acMat, W - 0.18, H1 - 0.18, L - 0.4, building);
-
-// ====== 계단 (가파른, X 진행) ======
+// ====== 계단 (좌→우 ascending, 욕실 남측 벽 z=BZ2 따라) ======
 const stairsGroup = new THREE.Group();
 building.add(stairsGroup);
 
-const N_STEPS = 12;
-const stepRise = (H1 + SLAB) / N_STEPS;
-const stepRun = STAIR_LEN_X / N_STEPS;
 for (let i = 0; i < N_STEPS; i++) {
-  // X: 시작 W → 부엌끝 STAIR_X_TO. 위로 갈수록 X 작아짐.
-  const cx = STAIR_X_FROM - i * stepRun - stepRun/2;
+  const cx = STAIR_X1 + i * stepRun + stepRun/2;
   const cy = i * stepRise + stepRise/2;
   const cz = (STAIR_Z1 + STAIR_Z2)/2;
-  // 디딤판: X stepRun 만큼, Z STAIR_W
-  box(stepRun * 0.95, 0.04, STAIR_W, woodStepMat, cx, cy + stepRise/2, cz, stairsGroup);
+  box(stepRun * 0.95, 0.04, STAIR_W * 0.92, woodStepMat,
+      cx, cy + stepRise/2, cz, stairsGroup);
 }
-// 측면 (Z=STAIR_Z2 쪽, 거실쪽 open side에 흰 패널)
+// 흰색 사이드 스트링거 (북측 = 욕실벽쪽)
 {
-  const len = Math.hypot(STAIR_LEN_X, H1 + SLAB);
-  const angle = Math.atan2(H1 + SLAB, STAIR_LEN_X);
-  const panel = new THREE.Mesh(new THREE.BoxGeometry(len, 0.4, 0.025), railMat);
-  panel.position.set((STAIR_X_FROM + STAIR_X_TO)/2, (H1 + SLAB)/2, STAIR_Z2 - 0.01);
-  panel.rotation.y = 0;
+  const len = Math.hypot(STAIR_X2 - STAIR_X1, H1);
+  const angle = Math.atan2(H1, STAIR_X2 - STAIR_X1);
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(len, 0.40, 0.025), stairSideMat);
+  panel.position.set((STAIR_X1+STAIR_X2)/2, H1/2 + 0.05, STAIR_Z1 + 0.02);
   panel.rotation.z = angle;
-  panel.castShadow = true;
   stairsGroup.add(panel);
-
-  const handrail = new THREE.Mesh(new THREE.BoxGeometry(len, 0.04, 0.04), railMat);
-  handrail.position.set((STAIR_X_FROM + STAIR_X_TO)/2 + 0.05*Math.sin(angle),
-                        (H1 + SLAB)/2 + 0.85*Math.cos(angle),
-                        STAIR_Z2 - 0.02);
-  handrail.rotation.z = angle;
-  stairsGroup.add(handrail);
 }
-// 수직 봉 (open side)
-for (let i = 1; i < N_STEPS; i += 3) {
-  const cx = STAIR_X_FROM - i * stepRun;
+// 핸드레일 (얇은 금속 봉, 남측 = 거실쪽)
+{
+  const len = Math.hypot(STAIR_X2 - STAIR_X1, H1);
+  const angle = Math.atan2(H1, STAIR_X2 - STAIR_X1);
+  const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 8), metalMat);
+  rail.position.set((STAIR_X1+STAIR_X2)/2, H1/2 + 0.95, STAIR_Z2 - 0.02);
+  rail.rotation.z = angle - Math.PI/2;
+  stairsGroup.add(rail);
+}
+// 핸드레일 수직 지지봉
+for (let i = 0; i <= N_STEPS; i += 3) {
+  const cx = STAIR_X1 + i * stepRun;
   const cy = i * stepRise;
-  box(0.025, 0.85, 0.025, railMat, cx, cy + 0.425, STAIR_Z2 - 0.02, stairsGroup);
+  if (cy < H1 - 0.05)
+    box(0.012, H1 - cy, 0.012, metalMat, cx, (cy + H1)/2, STAIR_Z2 - 0.02, stairsGroup);
 }
 
 // ====== 복층 ======
 const loftGroup = new THREE.Group();
 building.add(loftGroup);
 
-// 복층 바닥 (부엌+욕실 위 + 계단 위)
-box(LOFT_X2, SLAB, LOFT_Z2, woodStepMat,
-    LOFT_X2/2, H1 + SLAB/2, LOFT_Z2/2, loftGroup);
+// 복층 바닥 (z=0 ~ LOFT_Z2)
+box(W, SLAB, LOFT_Z2, woodStepMat,
+    W/2, H1 + SLAB/2, LOFT_Z2/2, loftGroup);
 
-// 복층 난간 (개방 변)
-const railH = 0.85;
-// East edge of loft (X=LOFT_X2): 거실쪽 개방
-for (let z = 0.12; z <= LOFT_Z2 - 0.1; z += 0.2) {
-  box(0.025, railH, 0.025, railMat, LOFT_X2, H1 + SLAB + railH/2, z, loftGroup);
+// 복층 정면 (z=LOFT_Z2): 그리드 오픈 수납 (난간)
+const SHELF_Y0 = LOFT_Y;
+const SHELF_H = 0.85;
+const VCOLS = 5, HROWS = 3;
+for (let j = 0; j <= HROWS; j++) {
+  const y = SHELF_Y0 + SHELF_H * j / HROWS;
+  box(W, 0.025, 0.30, railMat, W/2, y, LOFT_Z2 - 0.15, loftGroup);
 }
-box(0.04, 0.04, LOFT_Z2, railMat, LOFT_X2, H1 + SLAB + railH, LOFT_Z2/2, loftGroup);
-box(0.04, 0.04, LOFT_Z2, railMat, LOFT_X2, H1 + SLAB + 0.08, LOFT_Z2/2, loftGroup);
-// Front edge (Z=LOFT_Z2): 거실쪽 개방
-for (let x = 0.12; x <= LOFT_X2 - 0.1; x += 0.2) {
-  box(0.025, railH, 0.025, railMat, x, H1 + SLAB + railH/2, LOFT_Z2, loftGroup);
+for (let i = 0; i <= VCOLS; i++) {
+  const x = W * i / VCOLS;
+  box(0.02, SHELF_H, 0.30, railMat, x, SHELF_Y0 + SHELF_H/2, LOFT_Z2 - 0.15, loftGroup);
 }
-box(LOFT_X2, 0.04, 0.04, railMat, LOFT_X2/2, H1 + SLAB + railH, LOFT_Z2, loftGroup);
-box(LOFT_X2, 0.04, 0.04, railMat, LOFT_X2/2, H1 + SLAB + 0.08, LOFT_Z2, loftGroup);
 
-// 복층 격자 수납 (부엌 위, 천장까지)
-const SHELF_X1 = 0.0, SHELF_X2 = K_X;
-const SHELF_Y1 = H1 + SLAB + 0.0;
-const SHELF_Y2 = TH - 0.05;
-const SHELF_Z1 = KZ1, SHELF_Z2 = KZ2;
+// 복층 부엌 위 그리드 책장 (사진 reference)
+const SH2_X1 = 0.0, SH2_X2 = KITCHEN_DEPTH + 0.30;
+const SH2_Z1 = KZ1 - 0.20, SH2_Z2 = KZ2 + 0.20;
+const SH2_Y1 = LOFT_Y + 0.02, SH2_Y2 = TH - 0.05;
 for (let i = 0; i <= 3; i++) {
-  const x = SHELF_X1 + (SHELF_X2 - SHELF_X1) * i / 3;
-  box(0.02, SHELF_Y2 - SHELF_Y1, SHELF_Z2 - SHELF_Z1, railMat,
-      x, (SHELF_Y1+SHELF_Y2)/2, (SHELF_Z1+SHELF_Z2)/2, loftGroup);
+  const x = SH2_X1 + (SH2_X2 - SH2_X1) * i / 3;
+  box(0.018, SH2_Y2 - SH2_Y1, SH2_Z2 - SH2_Z1, railMat,
+      x, (SH2_Y1+SH2_Y2)/2, (SH2_Z1+SH2_Z2)/2, loftGroup);
 }
-for (let j = 0; j <= 3; j++) {
-  const y = SHELF_Y1 + (SHELF_Y2 - SHELF_Y1) * j / 3;
-  box(SHELF_X2 - SHELF_X1, 0.02, SHELF_Z2 - SHELF_Z1, railMat,
-      (SHELF_X1+SHELF_X2)/2, y, (SHELF_Z1+SHELF_Z2)/2, loftGroup);
+for (let j = 0; j <= 2; j++) {
+  const y = SH2_Y1 + (SH2_Y2 - SH2_Y1) * j / 2;
+  box(SH2_X2 - SH2_X1, 0.018, SH2_Z2 - SH2_Z1, railMat,
+      (SH2_X1+SH2_X2)/2, y, (SH2_Z1+SH2_Z2)/2, loftGroup);
 }
+
+// ====== AC (좌측 벽 윗쪽, 창쪽) — 벽걸이 분리형 ======
+box(0.85, 0.28, 0.22, acMat,
+    0.12, H1 - 0.22, L - 0.55, building);
+box(0.78, 0.04, 0.005, blackMat, 0.12, H1 - 0.10, L - 0.55 + 0.10, building);
+
+// ====== 월패드 (현관 알코브 안쪽 동측) ======
+box(0.025, 0.18, 0.13, wallpadMat,
+    ED_X2 + 0.10, 1.50, 0.04 + WALL_THK/2, building);
+box(0.005, 0.14, 0.10, glassMat,
+    ED_X2 + 0.114, 1.50, 0.04 + WALL_THK/2, building);
+
+// 신발
+box(0.20, 0.05, 0.10, blackMat, ED_X1 + 0.25, 0.045, 0.20, building);
+box(0.20, 0.05, 0.10, blackMat, ED_X1 + 0.55, 0.045, 0.20, building);
 
 // ====== 자동 벽/천장 숨김 ======
 let autoHide = true;
@@ -440,25 +479,28 @@ function updateAutoHide() {
   const cam = camera.position;
   ext.west.visible  = !(cam.x < 0);
   ext.east.visible  = !(cam.x > W);
-  ext.south.visible = !(cam.z < 0);
-  ext.north.visible = !(cam.z > L);
+  ext.north.visible = !(cam.z < 0);
+  ext.south.visible = !(cam.z > L);
   ceilingGroup.visible = !(cam.y > TH);
 }
 
 // ====== Views ======
 function setView(name) {
-  const t = new THREE.Vector3(W/2, 1.2, L/2);
+  const t = new THREE.Vector3(W/2, 1.0, L/2);
   let p;
   if (name === 'top') {
-    p = new THREE.Vector3(W/2 + 0.01, 12, L/2);
-  } else if (name === 'side') {
-    p = new THREE.Vector3(W + 7, 2.5, L/2);
-    t.set(W/2, 1.5, L/2);
+    p = new THREE.Vector3(W/2 + 0.01, 14, L/2);
+  } else if (name === 'front') {
+    p = new THREE.Vector3(W/2, 1.6, L + 6);
+    t.set(W/2, 1.4, L/2);
+  } else if (name === 'back') {
+    p = new THREE.Vector3(W/2, 1.6, -6);
+    t.set(W/2, 1.4, L/2);
   } else if (name === 'inside') {
-    p = new THREE.Vector3(W/2 + 0.5, 1.5, L - 0.3);
-    t.set(W/2, 1.4, 0);
+    p = new THREE.Vector3(W/2 + 0.3, 1.4, L - 0.5);
+    t.set(W/2, 1.4, 0.5);
   } else { // iso
-    p = new THREE.Vector3(W + 4, 5.5, L + 4);
+    p = new THREE.Vector3(W + 5, 6.0, L + 5);
   }
   animateCamera(camera.position.clone(), p, controls.target.clone(), t, 600);
 }
