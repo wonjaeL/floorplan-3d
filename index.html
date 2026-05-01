@@ -98,13 +98,26 @@ const params = {
   kit_z1: 0.70,           kit_z2: 1.87,
   wd_left_south_z1: 1.87, wd_left_south_z2: 4.15,
   kit_depth: 0.55,
-  // 계단 (NS along east wall, 기본)
-  stair_dir: 'NS',                             // 'NS' | 'EW'
-  stair_x1: 2.80, stair_x2: 3.30,              // x range
-  stair_z_top: 1.53, stair_z_bot: 4.23,        // NS 모드: top z (loft side) ~ bottom z
+  // 계단 (EW 기본, run 축은 dir에 따라 결정됨)
+  // EW: run 축 = x (좌→우 ascending), 폭 축 = z
+  // NS: run 축 = z (남북 ascending), 폭 축 = x
+  stair_dir: 'EW',
+  stair_run_bot: 0.00,    // 바닥 끝 좌표 (EW면 x, NS면 z)
+  stair_run_top: 3.30,    // 복층 끝 좌표 (run 축 같음)
+  stair_width_a: 1.53,    // 폭 한쪽 (EW면 z, NS면 x) — 흰 사이드패널 쪽
+  stair_width_b: 2.03,    // 폭 다른쪽 — 핸드레일 쪽
   stair_steps: 10,
+  stair_panel_side: 'a',  // 'a' | 'b' (흰 saw-tooth 패널이 어느 쪽?)
   // 복층
   loft_z2: 4.15,
+  loft_rail_h: 0.85,      // 복층 난간 (그리드 수납) 높이
+  loft_rail_d: 0.30,      // 난간 깊이 (front-to-back)
+  loft_rail_vcols: 5,     // 세로 분할 수
+  loft_rail_hrows: 3,     // 가로 분할 수
+  // 부엌 위 그리드 책장 (복층, 부엌과 별도 조절)
+  loft_shelf_x1: 0.00, loft_shelf_x2: 0.85,
+  loft_shelf_z1: 0.50, loft_shelf_z2: 2.07,
+  loft_shelf_show: true,
   // 창 (앞벽)
   win_x1: 0.60, win_x2: 2.70, win_y1: 0.90, win_y2: 2.00,
   // 토글
@@ -454,28 +467,34 @@ function rebuild() {
   // 바닥
   box(p.W, SLAB, p.loft_z2, M.woodStep, p.W/2, p.H1 + SLAB/2, p.loft_z2/2, loftGroup);
   // 정면 그리드 수납 (난간)
-  const SH_Y0 = p.H1 + SLAB, SH_HH = 0.85;
-  for (let j = 0; j <= 3; j++) {
-    const y = SH_Y0 + SH_HH * j / 3;
-    box(p.W, 0.025, 0.30, M.rail, p.W/2, y, p.loft_z2 - 0.15, loftGroup);
+  const SH_Y0 = p.H1 + SLAB;
+  const SH_HH = p.loft_rail_h;
+  const SH_HD = p.loft_rail_d;
+  const HROWS = Math.max(1, Math.round(p.loft_rail_hrows));
+  const VCOLS = Math.max(1, Math.round(p.loft_rail_vcols));
+  for (let j = 0; j <= HROWS; j++) {
+    const y = SH_Y0 + SH_HH * j / HROWS;
+    box(p.W, 0.025, SH_HD, M.rail, p.W/2, y, p.loft_z2 - SH_HD/2, loftGroup);
   }
-  for (let i = 0; i <= 5; i++) {
-    const x = p.W * i / 5;
-    box(0.02, SH_HH, 0.30, M.rail, x, SH_Y0 + SH_HH/2, p.loft_z2 - 0.15, loftGroup);
+  for (let i = 0; i <= VCOLS; i++) {
+    const x = p.W * i / VCOLS;
+    box(0.02, SH_HH, SH_HD, M.rail, x, SH_Y0 + SH_HH/2, p.loft_z2 - SH_HD/2, loftGroup);
   }
-  // 부엌 위 그리드 책장
-  const SH2_X1 = 0.0, SH2_X2 = p.kit_depth + 0.30;
-  const SH2_Z1 = p.kit_z1 - 0.20, SH2_Z2 = p.kit_z2 + 0.20;
-  const SH2_Y1 = p.H1 + SLAB + 0.02, SH2_Y2 = TH - 0.05;
-  for (let i = 0; i <= 3; i++) {
-    const x = SH2_X1 + (SH2_X2 - SH2_X1) * i / 3;
-    box(0.018, SH2_Y2 - SH2_Y1, SH2_Z2 - SH2_Z1, M.rail,
-        x, (SH2_Y1+SH2_Y2)/2, (SH2_Z1+SH2_Z2)/2, loftGroup);
-  }
-  for (let j = 0; j <= 2; j++) {
-    const y = SH2_Y1 + (SH2_Y2 - SH2_Y1) * j / 2;
-    box(SH2_X2 - SH2_X1, 0.018, SH2_Z2 - SH2_Z1, M.rail,
-        (SH2_X1+SH2_X2)/2, y, (SH2_Z1+SH2_Z2)/2, loftGroup);
+  // 부엌 위 그리드 책장 (별도 조절)
+  if (p.loft_shelf_show) {
+    const SH2_X1 = p.loft_shelf_x1, SH2_X2 = p.loft_shelf_x2;
+    const SH2_Z1 = p.loft_shelf_z1, SH2_Z2 = p.loft_shelf_z2;
+    const SH2_Y1 = p.H1 + SLAB + 0.02, SH2_Y2 = TH - 0.05;
+    for (let i = 0; i <= 3; i++) {
+      const x = SH2_X1 + (SH2_X2 - SH2_X1) * i / 3;
+      box(0.018, SH2_Y2 - SH2_Y1, SH2_Z2 - SH2_Z1, M.rail,
+          x, (SH2_Y1+SH2_Y2)/2, (SH2_Z1+SH2_Z2)/2, loftGroup);
+    }
+    for (let j = 0; j <= 2; j++) {
+      const y = SH2_Y1 + (SH2_Y2 - SH2_Y1) * j / 2;
+      box(SH2_X2 - SH2_X1, 0.018, SH2_Z2 - SH2_Z1, M.rail,
+          (SH2_X1+SH2_X2)/2, y, (SH2_Z1+SH2_Z2)/2, loftGroup);
+    }
   }
 
   // === AC (좌측 벽 윗쪽, 창쪽) ===
@@ -513,71 +532,64 @@ function buildWardrobe(x1, x2, z1, z2, h, openSide) {
   }
 }
 
-// === 계단 헬퍼 (개선된 saw-tooth 사이드 패널) ===
+// === 계단 헬퍼 (EW/NS 통합, run/width 축 generic) ===
 function buildStairs(p) {
   const N = Math.max(3, Math.round(p.stair_steps));
-  let x1, x2, z1, z2, runAxis;
-  if (p.stair_dir === 'EW') {
-    x1 = p.stair_x1; x2 = p.stair_x2;     // bottom→top in x
-    z1 = p.stair_z_top; z2 = p.stair_z_bot;
-    runAxis = 'x';
-  } else { // NS
-    x1 = p.stair_x1; x2 = p.stair_x2;     // 폭 (x range, 일정)
-    z1 = p.stair_z_bot; z2 = p.stair_z_top; // bottom z → top z (top closer to back wall)
-    runAxis = 'z';
-  }
-  const stair_w = Math.abs(x2 - x1);
-  const total_run = (runAxis === 'x') ? Math.abs(p.stair_x2 - p.stair_x1) : Math.abs(p.stair_z_bot - p.stair_z_top);
+  const runAxis = p.stair_dir === 'EW' ? 'x' : 'z';
+  const total_run = Math.abs(p.stair_run_top - p.stair_run_bot);
+  const dirSign = Math.sign(p.stair_run_top - p.stair_run_bot) || 1;
   const run = total_run / N;
   const rise = p.H1 / N;
+  const wA = p.stair_width_a, wB = p.stair_width_b;
+  const widthCenter = (wA + wB) / 2;
+  const stair_w = Math.abs(wB - wA);
+  // 패널/핸드레일이 어느 쪽인지
+  const panelSide  = (p.stair_panel_side === 'a') ? Math.min(wA, wB) : Math.max(wA, wB);
+  const railSide   = (p.stair_panel_side === 'a') ? Math.max(wA, wB) : Math.min(wA, wB);
+  const panelOff   = (p.stair_panel_side === 'a') ? +0.012 : -0.012;
+  const railOff    = -panelOff;
 
+  // 디딤판 (오픈 트레드)
   for (let i = 0; i < N; i++) {
+    const stepCenter = p.stair_run_bot + (i + 0.5) * run * dirSign;
     let cx, cz, tw, td;
     if (runAxis === 'x') {
-      // bottom at x1, top at x2 (assuming x2>x1)
-      cx = p.stair_x1 + i * run + run/2;
-      cz = (p.stair_z_top + p.stair_z_bot)/2;
+      cx = stepCenter; cz = widthCenter;
       tw = run * 0.95; td = stair_w * 0.92;
     } else {
-      // NS: bottom at z=stair_z_bot, top at z=stair_z_top (z_bot > z_top)
-      const dir = Math.sign(p.stair_z_top - p.stair_z_bot); // -1: 북쪽이 top
-      cz = p.stair_z_bot + (i + 0.5) * run * dir;
-      cx = (p.stair_x1 + p.stair_x2)/2;
+      cz = stepCenter; cx = widthCenter;
       tw = stair_w * 0.92; td = run * 0.95;
     }
-    const cy = i * rise + rise/2;
-    box(tw, 0.04, td, M.woodStep, cx, cy + rise/2, cz, building);
+    const cy = (i + 1) * rise;  // 디딤판 윗면
+    box(tw, 0.04, td, M.woodStep, cx, cy, cz, building);
   }
 
-  // 흰색 saw-tooth 사이드 패널 (각 단마다 채움)
-  // 한쪽 면 (북쪽 / "벽쪽")
+  // 흰 saw-tooth 사이드 패널 (각 단 아래 채움)
   for (let i = 0; i < N; i++) {
-    const cy_top = (i+1) * rise;
+    const stepCenter = p.stair_run_bot + (i + 0.5) * run * dirSign;
+    const cy_top = (i + 1) * rise;
     let cx, cz, w, d;
     if (runAxis === 'x') {
-      cx = p.stair_x1 + i * run + run/2;
-      cz = p.stair_z_top + 0.012;
+      cx = stepCenter; cz = panelSide + panelOff;
       w = run; d = 0.025;
     } else {
-      const dir = Math.sign(p.stair_z_top - p.stair_z_bot);
-      cz = p.stair_z_bot + (i + 0.5) * run * dir;
-      cx = (p.stair_x1 < p.stair_x2 ? p.stair_x1 : p.stair_x2) + 0.012;
+      cz = stepCenter; cx = panelSide + panelOff;
       w = 0.025; d = run;
     }
     box(w, cy_top, d, M.stairSide, cx, cy_top/2, cz, building);
   }
 
-  // 핸드레일 (다른 쪽, 거실쪽)
+  // 핸드레일 (반대쪽, 사선)
   const len = Math.hypot(total_run, p.H1);
-  const ang = Math.atan2(p.H1, total_run);
+  const ang = Math.atan2(total_run, p.H1);
   const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 8), M.metal);
+  const runMid = (p.stair_run_bot + p.stair_run_top) / 2;
   if (runAxis === 'x') {
-    rail.position.set((p.stair_x1+p.stair_x2)/2, p.H1/2 + 0.95, p.stair_z_bot - 0.02);
-    rail.rotation.z = ang - Math.PI/2;
+    rail.position.set(runMid, p.H1/2 + 0.95, railSide + railOff);
+    rail.rotation.z = -dirSign * ang;
   } else {
-    const railSide = (p.stair_x1 < p.stair_x2 ? p.stair_x2 : p.stair_x1) - 0.02;
-    rail.position.set(railSide, p.H1/2 + 0.95, (p.stair_z_top+p.stair_z_bot)/2);
-    rail.rotation.x = ang + Math.PI/2 * Math.sign(p.stair_z_top - p.stair_z_bot);
+    rail.position.set(railSide + railOff, p.H1/2 + 0.95, runMid);
+    rail.rotation.x = dirSign * ang;
   }
   building.add(rail);
 
@@ -585,14 +597,12 @@ function buildStairs(p) {
   for (let i = 0; i <= N; i += 2) {
     const cy = i * rise;
     if (cy >= p.H1 - 0.05) continue;
+    const stepStart = p.stair_run_bot + i * run * dirSign;
     let cx, cz;
     if (runAxis === 'x') {
-      cx = p.stair_x1 + i * run;
-      cz = p.stair_z_bot - 0.02;
+      cx = stepStart; cz = railSide + railOff;
     } else {
-      const dir = Math.sign(p.stair_z_top - p.stair_z_bot);
-      cz = p.stair_z_bot + i * run * dir;
-      cx = (p.stair_x1 < p.stair_x2 ? p.stair_x2 : p.stair_x1) - 0.02;
+      cz = stepStart; cx = railSide + railOff;
     }
     box(0.012, p.H1 - cy + 0.05, 0.012, M.metal, cx, (cy + p.H1 + 0.05)/2, cz, building);
   }
@@ -681,16 +691,28 @@ fLeft.add(params, 'kit_z2', 0, 5).step(0.05).name('부엌 z 끝').onChange(onCha
 fLeft.add(params, 'wd_left_south_z1', 0, 5).step(0.05).name('남옷장 z 시작').onChange(onChange);
 fLeft.add(params, 'wd_left_south_z2', 0.5, 5.5).step(0.05).name('남옷장 z 끝').onChange(onChange);
 
-const fStair = gui.addFolder('계단');
-fStair.add(params, 'stair_dir', { 'NS (남북)':'NS', 'EW (동서)':'EW' }).name('진행 방향').onChange(onChange);
+const fStair = gui.addFolder('계단 (EW: run=x, NS: run=z)');
+fStair.add(params, 'stair_dir', { 'EW (동서, 좌→우)':'EW', 'NS (남북)':'NS' }).name('진행 방향').onChange(onChange);
 fStair.add(params, 'stair_steps', 6, 16).step(1).name('단수').onChange(onChange);
-fStair.add(params, 'stair_x1', 0, 3.3).step(0.05).name('x1 (NS:폭 좌)').onChange(onChange);
-fStair.add(params, 'stair_x2', 0, 3.3).step(0.05).name('x2 (NS:폭 우)').onChange(onChange);
-fStair.add(params, 'stair_z_top', 0, 5).step(0.05).name('top z (복층쪽)').onChange(onChange);
-fStair.add(params, 'stair_z_bot', 0, 6).step(0.05).name('bottom z').onChange(onChange);
+fStair.add(params, 'stair_run_bot', 0, 6).step(0.05).name('run 시작 (바닥)').onChange(onChange);
+fStair.add(params, 'stair_run_top', 0, 6).step(0.05).name('run 끝 (복층)').onChange(onChange);
+fStair.add(params, 'stair_width_a', 0, 6).step(0.05).name('폭 a (패널쪽)').onChange(onChange);
+fStair.add(params, 'stair_width_b', 0, 6).step(0.05).name('폭 b (핸드레일쪽)').onChange(onChange);
+fStair.add(params, 'stair_panel_side', { 'a 쪽':'a', 'b 쪽':'b' }).name('흰 패널 위치').onChange(onChange);
 
-const fLoft = gui.addFolder('복층');
+const fLoft = gui.addFolder('복층 + 난간');
 fLoft.add(params, 'loft_z2', 1.5, 6).step(0.05).name('복층 끝 z').onChange(onChange);
+fLoft.add(params, 'loft_rail_h', 0.3, 1.5).step(0.05).name('난간 높이').onChange(onChange);
+fLoft.add(params, 'loft_rail_d', 0.10, 0.60).step(0.02).name('난간 깊이').onChange(onChange);
+fLoft.add(params, 'loft_rail_hrows', 1, 6).step(1).name('가로 분할 수').onChange(onChange);
+fLoft.add(params, 'loft_rail_vcols', 1, 10).step(1).name('세로 분할 수').onChange(onChange);
+
+const fLoftShelf = gui.addFolder('복층 책장 (부엌 위, 별도)');
+fLoftShelf.add(params, 'loft_shelf_show').name('표시').onChange(onChange);
+fLoftShelf.add(params, 'loft_shelf_x1', 0, 3.3).step(0.05).name('x 시작').onChange(onChange);
+fLoftShelf.add(params, 'loft_shelf_x2', 0, 3.3).step(0.05).name('x 끝').onChange(onChange);
+fLoftShelf.add(params, 'loft_shelf_z1', 0, 6).step(0.05).name('z 시작').onChange(onChange);
+fLoftShelf.add(params, 'loft_shelf_z2', 0, 6).step(0.05).name('z 끝').onChange(onChange);
 
 const fWin = gui.addFolder('창문');
 fWin.add(params, 'win_x1', 0, 3.3).step(0.05).name('x1').onChange(onChange);
