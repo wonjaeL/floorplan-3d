@@ -25,6 +25,23 @@
   button.active { background: #2a7; border-color: #4d9; }
   small { opacity: .7; }
   .lil-gui { --width: 320px; }
+  #dumpPanel {
+    display: none; position: fixed; top: 60px; left: 50%;
+    transform: translateX(-50%); z-index: 100;
+    background: rgba(20,20,20,0.95); border: 1px solid #666;
+    border-radius: 8px; padding: 14px; width: 480px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #dumpPanel h3 { color: white; margin: 0 0 8px 0; font-size: 14px; }
+  #dumpText {
+    width: 100%; height: 320px; box-sizing: border-box;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 11px; background: #111; color: #ddd;
+    border: 1px solid #444; border-radius: 4px; padding: 8px;
+    resize: vertical;
+  }
+  #dumpPanel .row { display: flex; gap: 6px; margin-top: 8px; justify-content: flex-end; }
+  #dumpStatus { color: #4d9; font-size: 11px; margin-right: auto; align-self: center; }
 </style>
 </head>
 <body>
@@ -39,6 +56,16 @@
   <button onclick="setView('front')">정면(창)</button>
   <button onclick="setView('back')">뒤(현관)</button>
   <button onclick="setView('inside')">실내</button>
+</div>
+<div id="dumpPanel">
+  <h3>📋 파라미터 JSON</h3>
+  <textarea id="dumpText" spellcheck="false"></textarea>
+  <div class="row">
+    <span id="dumpStatus"></span>
+    <button onclick="copyDump()">📋 복사</button>
+    <button onclick="applyDump()">✅ 이 값으로 적용</button>
+    <button onclick="closeDump()">닫기</button>
+  </div>
 </div>
 
 <script type="importmap">
@@ -66,10 +93,11 @@ const params = {
   bath_x1: 1.55, bath_x2: 3.30,
   bath_z1: 0.00, bath_z2: 1.53,
   bath_door_z1: 0.30, bath_door_z2: 1.10,
-  // 부엌 (좌측 긴벽 니치)
-  kit_z1: 0.05, kit_z2: 1.22, kit_depth: 0.55,
-  // 좌측 옷장
-  wd_left_z1: 1.22, wd_left_z2: 4.15,
+  // 좌측 벽 = 북측옷장 + 부엌 + 남측옷장 (depth 공통)
+  wd_left_north_z1: 0.00, wd_left_north_z2: 0.70,
+  kit_z1: 0.70,           kit_z2: 1.87,
+  wd_left_south_z1: 1.87, wd_left_south_z2: 4.15,
+  kit_depth: 0.55,
   // 계단 (NS along east wall, 기본)
   stair_dir: 'NS',                             // 'NS' | 'EW'
   stair_x1: 2.80, stair_x2: 3.30,              // x range
@@ -84,10 +112,73 @@ const params = {
   auto_hide: true,
   // 액션
   reset: () => resetParams(),
+  dump: () => openDump(),
+  rotate_bath: () => rotateBathroom(),
 };
 const defaults = JSON.parse(JSON.stringify(params));
 function resetParams() {
   for (const k in defaults) if (typeof defaults[k] !== 'function') params[k] = defaults[k];
+  gui.controllersRecursive().forEach(c => c.updateDisplay());
+  rebuild();
+}
+
+// JSON 덤프/적용
+function paramsToJson() {
+  const out = {};
+  for (const k in params) {
+    if (typeof params[k] === 'function') continue;
+    out[k] = params[k];
+  }
+  return JSON.stringify(out, null, 2);
+}
+window.openDump = function() {
+  document.getElementById('dumpText').value = paramsToJson();
+  document.getElementById('dumpStatus').textContent = '';
+  document.getElementById('dumpPanel').style.display = 'block';
+};
+window.copyDump = function() {
+  const t = document.getElementById('dumpText');
+  t.select();
+  navigator.clipboard.writeText(t.value).then(
+    () => { document.getElementById('dumpStatus').textContent = '✓ 클립보드 복사됨'; },
+    () => { document.execCommand('copy'); document.getElementById('dumpStatus').textContent = '✓ 복사 (fallback)'; }
+  );
+};
+window.applyDump = function() {
+  try {
+    const obj = JSON.parse(document.getElementById('dumpText').value);
+    let n = 0;
+    for (const k in obj) {
+      if (k in params && typeof params[k] !== 'function' && typeof obj[k] === typeof params[k]) {
+        params[k] = obj[k]; n++;
+      }
+    }
+    gui.controllersRecursive().forEach(c => c.updateDisplay());
+    rebuild();
+    document.getElementById('dumpStatus').textContent = `✓ ${n}개 값 적용됨`;
+  } catch (e) {
+    document.getElementById('dumpStatus').textContent = '✗ JSON 파싱 실패: ' + e.message;
+  }
+};
+window.closeDump = function() {
+  document.getElementById('dumpPanel').style.display = 'none';
+};
+
+// 욕실 90° 회전 (back-right 코너 anchor 유지, 폭/깊이 swap)
+function rotateBathroom() {
+  const w = params.bath_x2 - params.bath_x1;
+  const d = params.bath_z2 - params.bath_z1;
+  const new_w = d, new_d = w;
+  // 우측 외벽 anchor (bath_x2 = W) 유지
+  params.bath_x2 = params.W;
+  params.bath_x1 = Math.max(0, params.W - new_w);
+  params.bath_z1 = 0;
+  params.bath_z2 = Math.min(params.L - 0.5, new_d);
+  // 도어 위치도 비율 보존
+  const ratio_z1 = params.bath_door_z1 / d;
+  const ratio_z2 = params.bath_door_z2 / d;
+  params.bath_door_z1 = Math.min(params.bath_z2 - 0.4, ratio_z1 * new_d);
+  params.bath_door_z2 = Math.min(params.bath_z2 - 0.05, ratio_z2 * new_d);
   gui.controllersRecursive().forEach(c => c.updateDisplay());
   rebuild();
 }
@@ -352,8 +443,9 @@ function rebuild() {
         KMID + 0.001, p.H1 - 0.32, z, building);
   }
 
-  // === 좌측 옷장 ===
-  buildWardrobe(0, p.kit_depth, p.wd_left_z1, p.wd_left_z2, p.H1 - 0.04, 'east');
+  // === 좌측 옷장 (북측 + 남측, 부엌 양쪽) ===
+  buildWardrobe(0, p.kit_depth, p.wd_left_north_z1, p.wd_left_north_z2, p.H1 - 0.04, 'east');
+  buildWardrobe(0, p.kit_depth, p.wd_left_south_z1, p.wd_left_south_z2, p.H1 - 0.04, 'east');
 
   // === 계단 ===
   buildStairs(p);
@@ -574,18 +666,20 @@ fEnt.add(params, 'ent_x2', 0, 3.3).step(0.05).name('도어 우측 x').onChange(o
 const fBath = gui.addFolder('욕실');
 fBath.add(params, 'bath_x1', 0, 3).step(0.05).name('서측벽 x').onChange(onChange);
 fBath.add(params, 'bath_x2', 0.5, 3.30).step(0.05).name('동측벽 x').onChange(onChange);
-fBath.add(params, 'bath_z2', 0.8, 3.0).step(0.05).name('남측벽 z (깊이)').onChange(onChange);
-fBath.add(params, 'bath_door_z1', 0, 2.5).step(0.05).name('도어 z 시작').onChange(onChange);
-fBath.add(params, 'bath_door_z2', 0.3, 3.0).step(0.05).name('도어 z 끝').onChange(onChange);
+fBath.add(params, 'bath_z1', 0, 3).step(0.05).name('북측벽 z').onChange(onChange);
+fBath.add(params, 'bath_z2', 0.5, 5).step(0.05).name('남측벽 z').onChange(onChange);
+fBath.add(params, 'bath_door_z1', 0, 4).step(0.05).name('도어 z 시작').onChange(onChange);
+fBath.add(params, 'bath_door_z2', 0.3, 5).step(0.05).name('도어 z 끝').onChange(onChange);
+fBath.add(params, 'rotate_bath').name('🔄 욕실 90° 회전 (가로↔세로)');
 
-const fKit = gui.addFolder('부엌 (좌측 니치)');
-fKit.add(params, 'kit_z1', 0, 4).step(0.05).name('z 시작').onChange(onChange);
-fKit.add(params, 'kit_z2', 0.3, 5).step(0.05).name('z 끝').onChange(onChange);
-fKit.add(params, 'kit_depth', 0.3, 0.8).step(0.05).name('깊이').onChange(onChange);
-
-const fWdL = gui.addFolder('좌측 옷장');
-fWdL.add(params, 'wd_left_z1', 0, 5).step(0.05).name('z 시작').onChange(onChange);
-fWdL.add(params, 'wd_left_z2', 0.5, 5.5).step(0.05).name('z 끝').onChange(onChange);
+const fLeft = gui.addFolder('좌측 벽 (북옷장 → 부엌 → 남옷장)');
+fLeft.add(params, 'kit_depth', 0.3, 0.8).step(0.05).name('공통 깊이').onChange(onChange);
+fLeft.add(params, 'wd_left_north_z1', 0, 5).step(0.05).name('북옷장 z 시작').onChange(onChange);
+fLeft.add(params, 'wd_left_north_z2', 0, 5).step(0.05).name('북옷장 z 끝').onChange(onChange);
+fLeft.add(params, 'kit_z1', 0, 5).step(0.05).name('부엌 z 시작').onChange(onChange);
+fLeft.add(params, 'kit_z2', 0, 5).step(0.05).name('부엌 z 끝').onChange(onChange);
+fLeft.add(params, 'wd_left_south_z1', 0, 5).step(0.05).name('남옷장 z 시작').onChange(onChange);
+fLeft.add(params, 'wd_left_south_z2', 0.5, 5.5).step(0.05).name('남옷장 z 끝').onChange(onChange);
 
 const fStair = gui.addFolder('계단');
 fStair.add(params, 'stair_dir', { 'NS (남북)':'NS', 'EW (동서)':'EW' }).name('진행 방향').onChange(onChange);
@@ -607,6 +701,7 @@ fWin.add(params, 'win_y2', 0.5, 3).step(0.05).name('상단 높이').onChange(onC
 const fTog = gui.addFolder('토글');
 fTog.add(params, 'show_loft').name('복층 표시').onChange(v => { if (loftGroup) loftGroup.visible = v; });
 fTog.add(params, 'auto_hide').name('벽 자동숨김');
+gui.add(params, 'dump').name('📋 JSON 덤프 / 불러오기');
 gui.add(params, 'reset').name('↻ 기본값으로 리셋');
 gui.close();
 
