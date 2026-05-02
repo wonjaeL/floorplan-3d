@@ -379,37 +379,6 @@ function rebuild() {
   // 욕실 도어
   box(0.04, 1.95, p.bath_door_z2 - p.bath_door_z1 - 0.05, M.doorBath,
       p.bath_x1 + 0.025, 0.975, (p.bath_door_z1+p.bath_door_z2)/2, building);
-  // 액센트 타일 (북벽)
-  box(p.bath_x2 - p.bath_x1 - 0.02, 0.55, 0.02, M.accentTile,
-      (p.bath_x1+p.bath_x2)/2, 1.55, p.bath_z1 + 0.04, building);
-  // 거울 (북벽 동쪽 절반)
-  const sinkX = p.bath_x1 + (p.bath_x2 - p.bath_x1) * 0.65;
-  box(0.55, 0.50, 0.04, M.glass,    sinkX, 1.45, p.bath_z1 + 0.04, building);
-  box(0.62, 0.58, 0.05, M.woodFrame, sinkX, 1.45, p.bath_z1 + 0.020, building);
-  // 세면대 (북벽)
-  box(0.50, 0.06, 0.40, M.counter, sinkX, 0.85, p.bath_z1 + 0.20, building);
-  box(0.36, 0.18, 0.34, M.counter, sinkX, 0.72, p.bath_z1 + 0.18, building);
-  {
-    const f = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.020, 0.18, 12), M.metal);
-    f.position.set(sinkX, 0.97, p.bath_z1 + 0.10); building.add(f);
-  }
-  // 변기 (남동 코너)
-  box(0.36, 0.40, 0.55, M.counter, p.bath_x2 - 0.22, 0.20, p.bath_z2 - 0.30, building);
-  box(0.40, 0.45, 0.18, M.counter, p.bath_x2 - 0.22, 0.62, p.bath_z2 - 0.10, building);
-  // 샤워 (북서 코너) - 글라스 박스
-  const SH_W = 0.65, SH_D = Math.min(0.95, p.bath_z2 - 0.10);
-  box(0.04, BATH_H - 0.10, SH_D, M.showerGlass,
-      p.bath_x1 + SH_W, BATH_H/2 - 0.05, p.bath_z1 + SH_D/2, building);
-  box(0.50, BATH_H - 0.10, 0.04, M.showerGlass,
-      p.bath_x1 + SH_W - 0.25, BATH_H/2 - 0.05, p.bath_z1 + SH_D, building);
-  {
-    const head = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.04, 16), M.metal);
-    head.position.set(p.bath_x1 + 0.06, 1.93, p.bath_z1 + 0.30);
-    head.rotation.z = Math.PI/2;
-    building.add(head);
-  }
-  box(0.06, 0.20, 0.04, M.metal, p.bath_x1 + 0.04, 1.05, p.bath_z1 + 0.30, building);
-  box(0.20, 0.005, 0.20, M.black, p.bath_x1 + 0.30, 0.03, p.bath_z1 + 0.40, building);
 
   // === 부엌 (좌측 긴벽 니치) ===
   const KX1 = 0.0, KX2 = p.kit_depth;
