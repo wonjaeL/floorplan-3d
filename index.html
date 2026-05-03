@@ -91,40 +91,40 @@ const params = {
   ent_x1: 0.55, ent_x2: 1.45,
   // 욕실 (back-right 영역)
   bath_x1: 1.55, bath_x2: 3.30,
-  bath_z1: 0.00, bath_z2: 1.53,
-  bath_door_z1: 0.30, bath_door_z2: 1.10,
+  bath_z1: 0.00, bath_z2: 2.20,
+  bath_door_z1: 1.25, bath_door_z2: 2.05,
   // 좌측 벽 = 북측옷장 + 부엌 + 남측옷장 (depth 공통)
-  wd_left_north_z1: 0.00, wd_left_north_z2: 0.70,
-  kit_z1: 0.70,           kit_z2: 1.87,
-  wd_left_south_z1: 1.87, wd_left_south_z2: 4.15,
-  kit_depth: 0.55,
+  wd_left_north_z1: 0.00, wd_left_north_z2: 2.45,
+  kit_z1: 2.45,           kit_z2: 4.15,
+  wd_left_south_z1: 4.15, wd_left_south_z2: 5.50,
+  kit_depth: 0.70,
   // 계단 (EW 기본, run 축은 dir에 따라 결정됨)
   // EW: run 축 = x (좌→우 ascending), 폭 축 = z
   // NS: run 축 = z (남북 ascending), 폭 축 = x
   stair_dir: 'EW',
-  stair_run_bot: 0.00,    // 바닥 끝 좌표 (EW면 x, NS면 z)
+  stair_run_bot: 1.55,    // 바닥 끝 좌표 (EW면 x, NS면 z)
   stair_run_top: 3.30,    // 복층 끝 좌표 (run 축 같음)
-  stair_width_a: 1.53,    // 폭 한쪽 (EW면 z, NS면 x) — 흰 사이드패널 쪽
-  stair_width_b: 2.03,    // 폭 다른쪽 — 핸드레일 쪽
-  stair_steps: 10,
+  stair_width_a: 2.60,    // 폭 한쪽 (EW면 z, NS면 x) — 흰 사이드패널 쪽
+  stair_width_b: 2.20,    // 폭 다른쪽 — 핸드레일 쪽
+  stair_steps: 8,
   stair_panel_side: 'a',  // 'a' | 'b' (흰 saw-tooth 패널이 어느 쪽?)
   // 복층
-  loft_z2: 4.15,
-  loft_rail_h: 0.85,      // 복층 난간 (그리드 수납) 높이
-  loft_rail_d: 0.30,      // 난간 깊이 (front-to-back)
+  loft_z2: 2.20,
+  loft_rail_h: 0.30,      // 복층 난간 (그리드 수납) 높이
+  loft_rail_d: 0.10,      // 난간 깊이 (front-to-back)
   loft_rail_vcols: 5,     // 세로 분할 수
-  loft_rail_hrows: 3,     // 가로 분할 수
+  loft_rail_hrows: 1,     // 가로 분할 수
   // 부엌 위 그리드 책장 (복층, 부엌과 별도 조절)
-  loft_shelf_x1: 0.00, loft_shelf_x2: 0.85,
-  loft_shelf_z1: 0.50, loft_shelf_z2: 2.07,
+  loft_shelf_x1: 0.00, loft_shelf_x2: 0.40,
+  loft_shelf_z1: 5.65, loft_shelf_z2: 2.15,
   loft_shelf_show: true,
   // 창 (앞벽)
-  win_x1: 0.60, win_x2: 2.70, win_y1: 0.90, win_y2: 2.00,
+  win_x1: 0.75, win_x2: 2.95, win_y1: 0.60, win_y2: 2.60,
   // 사람 (스케일 기준)
   person_show: true,
   person_x: 1.65,
   person_z: 4.50,
-  person_height: 1.70,
+  person_height: 1.80,
   // 토글
   show_loft: true,
   auto_hide: true,
