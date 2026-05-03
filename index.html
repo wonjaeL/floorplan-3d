@@ -120,6 +120,11 @@ const params = {
   loft_shelf_show: true,
   // 창 (앞벽)
   win_x1: 0.60, win_x2: 2.70, win_y1: 0.90, win_y2: 2.00,
+  // 사람 (스케일 기준)
+  person_show: true,
+  person_x: 1.65,
+  person_z: 4.50,
+  person_height: 1.70,
   // 토글
   show_loft: true,
   auto_hide: true,
@@ -260,6 +265,7 @@ const M = {
   mull:        new THREE.MeshStandardMaterial({ color: 0xe0dccf, roughness: 0.5 }),
   glass:       new THREE.MeshPhysicalMaterial({ color: 0xb8d2e6, transmission: 0.85, opacity: 0.35, transparent: true, roughness: 0.05, thickness: 0.05, side: THREE.DoubleSide }),
   showerGlass: new THREE.MeshPhysicalMaterial({ color: 0xeef4f8, transmission: 0.92, opacity: 0.22, transparent: true, roughness: 0.02, thickness: 0.04, side: THREE.DoubleSide }),
+  person:      new THREE.MeshStandardMaterial({ color: 0x6c8aa6, roughness: 0.6 }),
 };
 
 function box(w, h, d, mat, x, y, z, parent) {
@@ -478,7 +484,36 @@ function rebuild() {
   box(0.20, 0.05, 0.10, M.black, p.ent_x1 + 0.20, 0.045, 0.20, building);
   box(0.20, 0.05, 0.10, M.black, p.ent_x1 + 0.45, 0.045, 0.20, building);
 
+  // === 사람 (스케일 기준) ===
+  buildPerson(p);
+
   controls.target.set(p.W/2, 1.0, p.L/2);
+}
+
+// === 사람 헬퍼 (capsule body + sphere head) ===
+function buildPerson(p) {
+  if (!p.person_show) return;
+  const h = p.person_height;
+  const headR = h * 0.072;
+  const bodyR = h * 0.105;
+  const bodyTop = h - headR * 1.6;
+  const bodyBot = 0.04;
+  const bodyLen = bodyTop - bodyBot;
+  const segLen = Math.max(0.01, bodyLen - 2 * bodyR);
+  const body = new THREE.Mesh(
+    new THREE.CapsuleGeometry(bodyR, segLen, 8, 16),
+    M.person
+  );
+  body.position.set(p.person_x, bodyBot + bodyLen/2, p.person_z);
+  body.castShadow = true; body.receiveShadow = true;
+  building.add(body);
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(headR, 24, 16),
+    M.person
+  );
+  head.position.set(p.person_x, h - headR, p.person_z);
+  head.castShadow = true;
+  building.add(head);
 }
 
 // === 옷장 헬퍼 ===
@@ -688,6 +723,12 @@ fWin.add(params, 'win_x1', 0, 3.3).step(0.05).name('x1').onChange(onChange);
 fWin.add(params, 'win_x2', 0, 3.3).step(0.05).name('x2').onChange(onChange);
 fWin.add(params, 'win_y1', 0, 2.5).step(0.05).name('하단 높이').onChange(onChange);
 fWin.add(params, 'win_y2', 0.5, 3).step(0.05).name('상단 높이').onChange(onChange);
+
+const fPerson = gui.addFolder('사람 (스케일 기준)');
+fPerson.add(params, 'person_show').name('표시').onChange(onChange);
+fPerson.add(params, 'person_height', 1.20, 2.10).step(0.01).name('키 (m)').onChange(onChange);
+fPerson.add(params, 'person_x', 0, 5).step(0.05).name('x 위치').onChange(onChange);
+fPerson.add(params, 'person_z', 0, 6).step(0.05).name('z 위치').onChange(onChange);
 
 const fTog = gui.addFolder('토글');
 fTog.add(params, 'show_loft').name('복층 표시').onChange(v => { if (loftGroup) loftGroup.visible = v; });
